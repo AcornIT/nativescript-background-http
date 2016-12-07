@@ -18,6 +18,7 @@ export interface ErrorEventData extends observable.EventData {
 
 /**
  * Provides the current and total bytes of long running transfer tasks.
+ * Depending on the task status that can be upload or download progress information.
  */
 export interface ProgressEventData extends observable.EventData {
     /**
@@ -42,6 +43,16 @@ export interface ResultEventData extends observable.EventData {
 }
 
 /**
+ * Provides the task's current status when changed - only for 'uploading' and 'downloading'.
+ */
+export interface StatusEventData extends observable.EventData {
+    /**
+     * The string responce of the server.
+     */
+    data: string;
+}
+
+/**
  * Encapsulates some information for background http transfers.
  */
 export interface Task {
@@ -59,10 +70,20 @@ export interface Task {
      * Gets the expected total count of bytes to upload. (read-only)
      */
     totalUpload: number;
+    
+    /**
+     * Gets the current count of downloaded bytes. (read-only)
+     */
+    download: number;
+
+    /**
+     * Gets the expected total count of bytes to be downloaded. (read-only)
+     */
+    totalDownload: number;
 
     /**
      * Gets the status of the background upload task.
-     * Possible states: "panding" | "uploading" | "error" | "complete".
+     * Possible states: "pending" | "uploading" | "downloading" | "error" | "complete".
      * (read-only)
      */
     status: string;
@@ -98,6 +119,14 @@ export interface Task {
      * @event
      */
     on(event: "responded", handler: (e: ResultEventData) => void): void;
+    
+    /**
+     * When task status changes from 'pending' to 'uploading' and 'downloading'
+     * @param event
+     * @param handler A handler that will receive the status change event. 
+     * @event
+     */
+    on(event: "statuschange", handler: (e: StatusEventData) => void): void;
 
     /**
      * Subscribe for the success notification.
@@ -118,6 +147,20 @@ export interface Session {
      * @param request Options for the upload, sets uri, headers, task description etc.
      */
     uploadFile(fileUri: string, request: Request): Task;
+    
+    /**
+     * Initiate a new background JSON data post task.
+     * @param reqBody The JSON payload data to upload.
+     * @param request Options for the upload, sets uri, headers, task description etc.
+     */
+    postJSON(reqBody: string, request: Request): Task;
+    
+    /**
+     * Initiate a new background JSON data post task.
+     * @param reqBody The JSON payload data to upload.
+     * @param request Options for the upload, sets uri, headers, task description etc.
+     */
+    getJSON(request: Request): Task;
 }
 
 /**
@@ -139,6 +182,11 @@ export interface Request {
      * Specify additional HTTP headers.
      */
     headers?: {};
+    	
+   	/**
+     * Specify additional HTTP query string.
+     */
+    queryString?: {};
 
     /**
      * Use this to help you identify the task.
