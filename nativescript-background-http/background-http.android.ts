@@ -2,6 +2,8 @@ import application = require("application");
 import frame = require("ui/frame");
 import data_observable = require("data/observable");
 import utils = require("utils/utils");
+import * as JSONIntentService from "./android-intents/getjson-intent";
+import { HttpStatusDelegate, HttpAsyncTask } from "./android-async-http";
 
 declare var net;
 
@@ -59,6 +61,7 @@ var ProgressReceiver = (<any>net).gotev.uploadservice.UploadServiceBroadcastRece
    }
 });
 
+
 var receiver;
 
 export function session(id: string) {
@@ -90,8 +93,55 @@ class Session {
         return Task.create(this, file, options);
     }
 
+    public getJSON(request: Request): Task {
+        return Task.createGetJSON(request);
+    }
+
+    public postJSON(reqBody: string, request: Request): Task {
+        return null;
+    }
+
     get id(): string {
         return this._id;
+    }
+}
+
+class Request {
+
+    url: string;
+
+    method: string;
+
+    headers: {};
+
+    queryString: {};
+
+    description: string;
+
+    constructor(url?: string) {
+        this.url = url;
+    }
+}
+
+class JsonTaskDelegate implements HttpStatusDelegate {
+    private task: Task;
+
+    constructor(task: Task) {
+        this.task = task;
+    }
+
+    onProgress(downloaded: number) {
+        this.task.downloaded = downloaded;
+    }
+
+    onComplete(response: any) {
+        this.task._response = response;
+        this.task.setStatus("complete");
+    }
+
+    onError(err: Error) {
+        this.task._error = new Error("Server response not in JSON format.");
+        this.task.setStatus("errored");
     }
 }
 
@@ -108,6 +158,242 @@ class Task extends ObservableBase {
     private _status: string;
     private _description: string;
 
+    private _downloaded: number;
+    private _callback: Function;
+    private _errHandler: Function;
+    _response: any;
+    _error: Error;
+
+    static createGetJSON(request: Request): Task {
+        if (!request.url) {
+            throw new Error("No request url specified");
+        }
+        request.method = request.method || "GET";
+
+        let task: Task = new Task();
+        task.setDescription(request.description);
+        Task.cache[task._id] = task;
+
+
+
+
+        let delegate: JsonTaskDelegate = new JsonTaskDelegate(task);
+        let httpAsyncTask = new HttpAsyncTask(this);
+        httpAsyncTask.setDelegate(delegate).setRequest(request).execute(null);
+        //httpAsyncTask.execute(null);
+       // let httpReq: JSONIntentService.JSONHttpRequest = new JSONIntentService.JSONHttpRequest(request, task._id, delegate);
+       // httpReq.start();
+        //var executorService = java.util.concurrent.Executors.newSingleThreadExecutor();
+
+        /*var asyncTask = (<any>android.os.AsyncTask).extend({
+            doInBackground(prm : any) {
+               /* let urlParts: string[] = request.url.split(":");
+                if (urlParts.length < 2 || urlParts[1].split("//").length < 2) {
+                    throw new Error("Invalid url specified. Valid format: <protocol>://hostname[:<port>]");
+                }
+
+                let protocol: string = urlParts[0];
+                let host: string = urlParts[1].split("//")[1];
+                let port: number = null;
+                
+
+                if (urlParts.length > 2) {
+                    try {
+                        port = parseInt(urlParts[urlParts.length - 1]);
+                        if (isNaN(port)) {
+                            port = null;
+                        }
+                    } catch (e) { }
+                }
+
+                let params: string = null;
+                if (request.queryString) {
+                    params = "?";
+
+                    let paramNames: string[] = Object.keys(request.queryString);
+
+                    paramNames.forEach((paramName: string, index: number) => {
+                        let value: string = request.queryString[paramName];
+                        if (value !== null && value !== void 0) {
+                            params += paramName + "=" + value;
+                            if (index < paramNames.length - 1) {
+                                params += "&";
+                            }
+                        }
+                    });
+
+                    params = java.net.URLEncoder.encode(params, "UTF-8");
+                }
+                console.log('params: %s', params);
+                let finalUrl: string = request.url;
+                if (params) {
+                    finalUrl += params;
+                }
+                console.log('final url : %s', finalUrl);
+                var urlObject = new java.net.URL(finalUrl);
+                var httpConnection = urlObject.openConnection();
+
+                if (request.method === "POST" || request.method === "PUT") {
+                    httpConnection.setDoOutput(true);
+                }
+                (<any>httpConnection).setRequestMethod(request.method);
+
+
+
+                if (request.headers) {
+                    for (var header in request.headers) {
+                        var value = request.headers[header];
+                        if (value !== null && value !== void 0) {
+                            if (Array.isArray(value) && value.length > 0) {
+                                value = value[0];
+                                try {
+                                    value = JSON.stringify(value);
+                                } catch (e) { }
+                            }
+                            console.log('setting header %s with value %s', header, value);
+                            httpConnection.setRequestProperty(header, value);
+                        }
+                    }
+                }
+
+                task.setDescription(request.description);
+
+                Task.cache[task._id] = task;
+
+                let inStream = httpConnection.getInputStream();
+
+                let buffInStream = new java.io.BufferedInputStream(inStream);
+
+                let readByte: number = null;
+
+                let response = "";
+
+                task.setStatus("pending");
+
+                while (readByte !== -1) {
+                    readByte = buffInStream.read();
+                    response += String.fromCharCode(readByte);
+                    task.downloaded = task.downloaded || 0;
+                    task.downloaded++;
+                }
+
+                try {
+                    response = JSON.parse(response as string);
+                    task._response = response;
+                    task.setStatus("complete");
+                } catch (e) {
+                    task._error = new Error("Server response not in JSON format.");
+                    task.setStatus("errored");
+                }
+
+                console.log("response : %s", response);
+            }
+        });
+        /*
+        var runnable = new java.lang.Runnable({
+            run() {
+                let urlParts: string[] = request.url.split(":");
+                if (urlParts.length < 2 || urlParts[1].split("//").length < 2) {
+                    throw new Error("Invalid url specified. Valid format: <protocol>://hostname[:<port>]");
+                }
+
+                let protocol: string = urlParts[0];
+                let host: string = urlParts[1].split("//")[1];
+                let port: number = null;
+                let params: string = null;
+
+                if (urlParts.length > 2) {
+                    try {
+                        port = parseInt(urlParts[urlParts.length - 1]);
+                        if (isNaN(port)) {
+                            port = null;
+                        }
+                    } catch (e) { }
+                }
+
+                if (request.queryString) {
+                    params = "?";
+
+                    let paramNames: string[] = Object.keys(request.queryString);
+
+                    paramNames.forEach((paramName: string, index: number) => {
+                        let value: string = request.queryString[paramName];
+                        if (value !== null && value !== void 0) {
+                            params += paramName + "=" + value;
+                            if (index < paramNames.length - 1) {
+                                params += "&";
+                            }
+                        }
+                    });
+
+                    params = java.net.URLEncoder.encode(params, "UTF-8");
+                }
+                 
+                var urlObject = new java.net.URL(request.url + params);
+                var httpConnection = urlObject.openConnection();
+
+                if (request.method === "POST" || request.method === "PUT") {
+                    httpConnection.setDoOutput(true);
+                }
+                (<any>httpConnection).setRequestMethod(request.method);
+
+                
+
+                if (request.headers) {
+                    for (var header in request.headers) {
+                        var value = request.headers[header];
+                        if (value !== null && value !== void 0) {
+                            if (Array.isArray(value) && value.length > 0) {
+                                value = value[0];
+                                try {
+                                    value = JSON.stringify(value);
+                                } catch (e) { }
+                            }
+                            httpConnection.setRequestProperty(header, value);
+                        }
+                    }
+                }
+
+                task.setDescription(request.description);
+
+                Task.cache[task._id] = task;
+
+                let inStream = httpConnection.getInputStream();
+
+                let buffInStream = new java.io.BufferedInputStream(inStream);
+
+                let readByte: number = null;
+
+                let response = "";
+
+                task.setStatus("pending");
+
+                while (readByte !== -1) {
+                    readByte = buffInStream.read();
+                    response += String.fromCharCode(readByte);
+                    task.downloaded = task.downloaded || 0;
+                    task.downloaded++;
+                }
+
+                try {
+                    response = JSON.parse(response as string);
+                    task._response = response;
+                    task.setStatus("complete");
+                } catch (e) {
+                    task._error = new Error("Server response not in JSON format.");
+                    task.setStatus("errored");
+                }
+
+                console.log("response : %s", response);
+            }
+        });
+
+        //executorService.execute(runnable);
+
+        new asyncTask().execute(null);*/
+        return task;
+    }
+
     static create(session: Session, file: string, options: any): Task {
         var task = new Task();
         task._session = session;
@@ -116,7 +402,7 @@ class Task extends ObservableBase {
         var context = application.android.context;
 
         var request = new (<any>net).gotev.uploadservice.BinaryUploadRequest(context, task._id, options.url);
-
+        
         request.setFileToUpload(file);
 
         request.setNotificationConfig(new (<any>net).gotev.uploadservice.UploadNotificationConfig());
@@ -170,6 +456,25 @@ class Task extends ObservableBase {
         return this._session;
     }
 
+    get downloaded(): number {
+        return this._downloaded;
+    }
+
+    set downloaded(value: number) {
+        this._downloaded = value;
+        this.notify({ eventName: "progress", object: this, downloaded: value })
+    }
+
+    public then(callback: Function) {
+        this._callback = callback;
+        return this;
+    }
+
+    public catch(callback: Function) {
+        this._errHandler = callback;
+        return this;
+    }
+
     setTotalUpload(value: number) {
         this._totalUpload = value;
         this.notifyPropertyChanged("totalUpload", value);
@@ -182,6 +487,17 @@ class Task extends ObservableBase {
 
     setStatus(value: string) {
         this._status = value;
+        if (this._status === "complete") {
+            if (this._callback) {
+                this._callback(this._response);
+            }
+            this.notify({ eventName: "complete", object: this, response: this._response });
+        } else if (this._status === "errored") {
+            if (this._errHandler) {
+                this._errHandler(this._error);
+            }
+            this.notify({ eventName: "error", object: this, response: this._error});
+        }
         this.notifyPropertyChanged("status", value);
     }
 
@@ -189,6 +505,7 @@ class Task extends ObservableBase {
         this._description = value;
         this.notifyPropertyChanged("description", value);
     }
+
 }
 
 

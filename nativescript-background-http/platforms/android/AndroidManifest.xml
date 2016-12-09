@@ -12,5 +12,13 @@
                 <action android:name="org.nativescript.imagepicker.uploadservice.action.upload"/>
             </intent-filter>
         </service>
+        <service
+            android:name="ro.acorn.nsbghttp.GetJSONIntentService"
+            android:enabled="true"
+            android:exported="false" >
+            <intent-filter>
+                <action android:name="ro.acorn.nsbghttp.start"/>
+            </intent-filter>
+        </service>
     </application>
 </manifest>
